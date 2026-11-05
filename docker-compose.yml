@@ -1,0 +1,91 @@
+name: pulsefeed
+services:
+  engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.engine
+    environment:
+      ENGINE_ADDR: 0.0.0.0:50051
+      ENGINE_METRICS_PORT: "9091"
+      ENGINE_DEMO: ${ENGINE_DEMO:-true}
+      DEMO_INTERVAL_US: ${DEMO_INTERVAL_US:-10000}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 8s
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    environment:
+      ENGINE_ADDR: engine:50051
+      REDIS_ADDR: redis:6379
+      HTTP_ADDR: :8080
+      INGEST: "true"
+    ports:
+      - 127.0.0.1:${GATEWAY_PORT:-8080}:8080
+    depends_on:
+      engine:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 8s
+
+  redis:
+    image: redis:7.4.12-alpine3.21
+    user: redis:redis
+    command: [redis-server, --save, "", --appendonly, "no", --maxmemory, 128mb, --maxmemory-policy, noeviction]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/data:rw,noexec,nosuid,size=16m,uid=999,mode=0700"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  prometheus:
+    image: prom/prometheus:v3.5.5
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro,z
+      - prometheus_data:/prometheus
+    ports:
+      - 127.0.0.1:${PROMETHEUS_PORT:-9090}:9090
+    depends_on: [engine, gateway]
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  grafana:
+    image: grafana/grafana:13.0.12
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-pulsefeed-local}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro,z
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro,z
+      - grafana_data:/var/lib/grafana
+    ports:
+      - 127.0.0.1:${GRAFANA_PORT:-3000}:3000
+    depends_on: [prometheus]
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,21 @@
+FROM ubuntu:24.04 AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates cmake ninja-build g++ libgrpc++-dev libprotobuf-dev \
+    protobuf-compiler protobuf-compiler-grpc && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY CMakeLists.txt OrderBook.hpp OrderBook.cpp SpscRing.hpp ./
+COPY proto ./proto
+COPY cpp ./cpp
+RUN cmake -S . -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_TESTING=OFF -DPULSEFEED_BUILD_ENGINE=ON && cmake --build /build --target engine -j2
+
+FROM ubuntu:24.04 AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates libgrpc++1.51t64 libprotobuf32t64 && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 pulsefeed && useradd --uid 10001 --gid 10001 --no-create-home pulsefeed
+COPY --from=builder /build/engine /usr/local/bin/pulsefeed_engine
+USER 10001:10001
+EXPOSE 50051 9091
+HEALTHCHECK --interval=5s --timeout=2s --start-period=5s --retries=5 \
+    CMD ["/usr/local/bin/pulsefeed_engine", "--healthcheck"]
+ENTRYPOINT ["/usr/local/bin/pulsefeed_engine"]

@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package pulsefeed.v1;
+option go_package = "pulsefeed/gateway/gen;pulsefeedv1";
+
+// Prices are integer ticks and quantities are integer lots for one instrument.
+service MarketData {
+  rpc Subscribe(SubscribeRequest) returns (stream FeedEvent);
+  rpc Submit(OrderRequest) returns (CommandReply);
+  rpc Cancel(CancelRequest) returns (CommandReply);
+}
+message SubscribeRequest {}
+enum Side { SIDE_UNSPECIFIED = 0; BUY = 1; SELL = 2; }
+message OrderRequest {
+  uint64 order_id = 1;
+  Side side = 2;
+  uint32 price = 3;
+  uint32 quantity = 4;
+}
+message CancelRequest { uint64 order_id = 1; }
+message CommandReply {
+  bool accepted = 1;
+  string reason = 2;
+  uint64 sequence = 3;
+}
+message Trade {
+  uint64 maker_order_id = 1;
+  uint64 taker_order_id = 2;
+  uint32 price = 3;
+  uint32 quantity = 4;
+  Side aggressor_side = 5;
+}
+message Level { uint32 price = 1; uint64 quantity = 2; uint32 orders = 3; }
+// Each event includes a complete top-10 snapshot. Trade events are best-effort;
+// depth is independently recoverable at the next event after a sequence gap.
+message FeedEvent {
+  string epoch = 1;
+  uint64 sequence = 2;
+  uint64 unix_nanos = 3;
+  Trade trade = 4;
+  repeated Level bids = 5;
+  repeated Level asks = 6;
+  bool snapshot = 7;
+}

@@ -1,0 +1,9 @@
+.git
+.agents
+.aws
+.codex
+build
+artifacts
+PulseFeed-source.tar.gz
+certs
+.env

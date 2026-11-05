@@ -1,0 +1,423 @@
+{
+  "id": null,
+  "uid": "pulsefeed",
+  "title": "PulseFeed \u2014 Market Data Pipeline",
+  "tags": [
+    "pulsefeed"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Engine throughput",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pulsefeed-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(engine_commands_total[1m])",
+          "legendFormat": "commands/s"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(engine_trades_total[1m])",
+          "legendFormat": "executions/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Backpressure and sequence gaps",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pulsefeed-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(engine_feed_dropped_total[1m])",
+          "legendFormat": "engine envelope drops/s"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(engine_ingress_full_total[1m])",
+          "legendFormat": "engine ingress rejects/s"
+        },
+        {
+          "refId": "C",
+          "expr": "rate(pulsefeed_gateway_sequence_gaps_total[1m])",
+          "legendFormat": "gateway missing sequences/s"
+        },
+        {
+          "refId": "D",
+          "expr": "rate(pulsefeed_gateway_slow_clients_total[1m])",
+          "legendFormat": "slow WebSocket clients/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Engine timestamp to gateway fanout age",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pulsefeed-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(pulsefeed_gateway_event_age_seconds_bucket[1m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(pulsefeed_gateway_event_age_seconds_bucket[1m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(pulsefeed_gateway_event_age_seconds_bucket[1m])))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Connections and resting orders",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pulsefeed-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "engine_active_orders",
+          "legendFormat": "resting L3 orders"
+        },
+        {
+          "refId": "B",
+          "expr": "engine_subscribers",
+          "legendFormat": "gRPC streams"
+        },
+        {
+          "refId": "C",
+          "expr": "pulsefeed_gateway_clients",
+          "legendFormat": "WebSocket clients"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Transport throughput",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pulsefeed-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(engine_published_total[1m])",
+          "legendFormat": "engine dispatched/s"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(pulsefeed_gateway_ingested_total[1m])",
+          "legendFormat": "gateway gRPC/s"
+        },
+        {
+          "refId": "C",
+          "expr": "rate(pulsefeed_gateway_published_total[1m])",
+          "legendFormat": "Redis publishes/s"
+        },
+        {
+          "refId": "D",
+          "expr": "rate(pulsefeed_gateway_received_total[1m])",
+          "legendFormat": "Redis receives/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Readiness indicators",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pulsefeed-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up",
+          "legendFormat": "Prometheus scrape {{job}}"
+        },
+        {
+          "refId": "B",
+          "expr": "pulsefeed_gateway_engine_up",
+          "legendFormat": "gateway engine stream"
+        },
+        {
+          "refId": "C",
+          "expr": "pulsefeed_gateway_redis_up",
+          "legendFormat": "Redis probe"
+        },
+        {
+          "refId": "D",
+          "expr": "pulsefeed_gateway_subscriber_up",
+          "legendFormat": "Redis subscription"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Process resources",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pulsefeed-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_resident_memory_bytes{job=\"gateway\"}",
+          "legendFormat": "gateway RSS"
+        },
+        {
+          "refId": "B",
+          "expr": "go_memstats_heap_alloc_bytes{job=\"gateway\"}",
+          "legendFormat": "gateway heap"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Rejected commands and disconnected subscribers",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "pulsefeed-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(engine_rejected_total[1m])",
+          "legendFormat": "book rejects/s"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(engine_subscriber_dropped_total[1m])",
+          "legendFormat": "slow gRPC subscribers/s"
+        },
+        {
+          "refId": "C",
+          "expr": "rate(pulsefeed_gateway_reconnects_total[1m])",
+          "legendFormat": "gateway reconnect attempts/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": []
+  },
+  "links": []
+}

@@ -1,0 +1,39 @@
+name: verify
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  cpp:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cmake libgrpc++-dev protobuf-compiler-grpc libprotobuf-dev libbenchmark-dev
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DPULSEFEED_BUILD_ENGINE=ON -DPULSEFEED_BUILD_BENCHMARKS=ON
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure
+      - run: ./build/benchmarks --benchmark_filter=Latency/Match --benchmark_min_time=0.01s
+      - run: make sanitize
+  go:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: gateway/go.mod
+          cache-dependency-path: gateway/go.sum
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: go build ./...
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/smoke.sh
+      - if: always()
+        run: docker compose logs --tail=100
+      - if: always()
+        run: docker compose down -v
