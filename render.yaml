@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: pulsefeed-demo
+    runtime: docker
+    plan: free
+    numInstances: 1
+    dockerfilePath: ./Dockerfile.demo
+    dockerContext: .
+    healthCheckPath: /readyz
+    maxShutdownDelaySeconds: 20
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: ENGINE_DEMO
+        value: "true"
+      - key: DEMO_INTERVAL_US
+        value: "250000"
+      - key: MAX_CLIENTS
+        value: "100"
+      - key: CLIENT_BUFFER
+        value: "8"
+      - key: GOMEMLIMIT
+        value: 128MiB
+      - key: GOMAXPROCS
+        value: "1"

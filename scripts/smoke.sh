@@ -14,9 +14,13 @@ wait_http() {
   echo "Readiness timed out: $address" >&2
   return 1
 }
-wait_http "http://127.0.0.1:${GATEWAY_PORT:-8080}/readyz"
-wait_http "http://127.0.0.1:${PROMETHEUS_PORT:-9090}/-/ready"
-wait_http "http://127.0.0.1:${GRAFANA_PORT:-3000}/api/health"
+# Ask Compose for the actual bindings so .env and exported port overrides agree.
+gateway_address="$(docker compose port gateway 8080)"
+prometheus_address="$(docker compose port prometheus 9090)"
+grafana_address="$(docker compose port grafana 3000)"
+wait_http "http://${gateway_address}/readyz"
+wait_http "http://${prometheus_address}/-/ready"
+wait_http "http://${grafana_address}/api/health"
 docker compose exec -T gateway subscriber -url ws://127.0.0.1:8080/ws \
   -clients 20 -duration 3s -quiet
 echo 'Stack smoke check passed. Services remain running; stop with docker compose down.'

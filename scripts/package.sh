@@ -5,7 +5,8 @@ destination="${1:-/tmp/PulseFeed-source.tar.gz}"
 # Select only project sources, never hidden workspace metadata or credentials.
 tar -czf "$destination" --exclude='*.out' \
   OrderBook.hpp OrderBook.cpp SpscRing.hpp benchmarks.cpp CMakeLists.txt Makefile \
-  README.md LICENSE Dockerfile.engine Dockerfile.gateway docker-compose.yml \
-  .gitignore .dockerignore .github proto cpp tests gateway/main.go gateway/main_test.go \
+  README.md LICENSE Dockerfile.engine Dockerfile.gateway Dockerfile.demo docker-compose.yml render.yaml \
+  .gitignore .dockerignore .env.example .github proto cpp tests gateway/main.go gateway/main_test.go \
+  gateway/web.go gateway/web_test.go gateway/web \
   gateway/go.mod gateway/go.sum gateway/gen gateway/cmd observability scripts
 echo "$destination"

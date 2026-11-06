@@ -22,7 +22,10 @@ import (
 	pb "pulsefeed/gateway/gen"
 )
 
-type counters struct{ events, gaps, epochs, reconnects, failures atomic.Uint64 }
+type counters struct {
+	events, gaps, epochs, reconnects, failures atomic.Uint64
+	clientsWithEvents                          atomic.Uint64
+}
 
 func consume(ctx context.Context, address, token string, id int, quiet bool, delay time.Duration, counts *counters) {
 	var epoch string
@@ -60,6 +63,9 @@ func consume(ctx context.Context, address, token string, id int, quiet bool, del
 					continue
 				}
 				counts.events.Add(1)
+				if !seen {
+					counts.clientsWithEvents.Add(1)
+				}
 				if seen && event.Epoch == epoch && event.Sequence > previous && event.Sequence-previous > 1 {
 					counts.gaps.Add(event.Sequence - previous - 1)
 				}
@@ -124,8 +130,8 @@ func main() {
 	}
 	workers.Wait()
 	elapsed := time.Since(start)
-	fmt.Fprintf(os.Stderr, "clients=%d elapsed=%s events=%d events_per_second=%.0f missing_sequences=%d epoch_changes=%d reconnects=%d failures=%d\n", *n, elapsed.Round(time.Millisecond), counts.events.Load(), float64(counts.events.Load())/elapsed.Seconds(), counts.gaps.Load(), counts.epochs.Load(), counts.reconnects.Load(), counts.failures.Load())
-	if counts.events.Load() == 0 {
+	fmt.Fprintf(os.Stderr, "clients=%d clients_with_events=%d elapsed=%s events=%d events_per_second=%.0f missing_sequences=%d epoch_changes=%d reconnects=%d failures=%d\n", *n, counts.clientsWithEvents.Load(), elapsed.Round(time.Millisecond), counts.events.Load(), float64(counts.events.Load())/elapsed.Seconds(), counts.gaps.Load(), counts.epochs.Load(), counts.reconnects.Load(), counts.failures.Load())
+	if counts.clientsWithEvents.Load() != uint64(*n) {
 		os.Exit(1)
 	}
 }

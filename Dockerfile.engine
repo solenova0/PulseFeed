@@ -1,4 +1,4 @@
-FROM ubuntu:24.04 AS builder
+FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates cmake ninja-build g++ libgrpc++-dev libprotobuf-dev \
     protobuf-compiler protobuf-compiler-grpc && rm -rf /var/lib/apt/lists/*
@@ -9,7 +9,7 @@ COPY cpp ./cpp
 RUN cmake -S . -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_TESTING=OFF -DPULSEFEED_BUILD_ENGINE=ON && cmake --build /build --target engine -j2
 
-FROM ubuntu:24.04 AS runtime
+FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates libgrpc++1.51t64 libprotobuf32t64 && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 pulsefeed && useradd --uid 10001 --gid 10001 --no-create-home pulsefeed

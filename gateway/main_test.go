@@ -168,10 +168,34 @@ func TestRedisSubscriptionReconnect(t *testing.T) {
 	eventually(t, a.ready)
 	server.Close()
 	eventually(t, func() bool { return !a.subscribed.Load() })
+	if a.stateReady.Load() {
+		t.Fatal("cached state remained ready after losing the subscription")
+	}
 	if err := server.Restart(); err != nil {
 		t.Fatal(err)
 	}
+	eventually(t, func() bool { return a.redisHealthy.Load() && a.subscribed.Load() })
+	if a.ready() {
+		t.Fatal("reconnected subscription became ready with stale depth")
+	}
+	if err := a.redis.Publish(ctx, c.redisChannel, payload).Err(); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, func() bool { return testutil.ToFloat64(a.metrics.duplicates) == 1 })
+	if a.ready() {
+		t.Fatal("duplicate event restored readiness with stale depth")
+	}
+	payload, err = proto.Marshal(&pb.FeedEvent{Epoch: "reconnect-test", Sequence: 2, Snapshot: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.redis.Publish(ctx, c.redisChannel, payload).Err(); err != nil {
+		t.Fatal(err)
+	}
 	eventually(t, a.ready)
+	if testutil.ToFloat64(a.metrics.gaps) != 1 {
+		t.Fatal("sequence tracking was lost during the reconnect")
+	}
 	if testutil.ToFloat64(a.metrics.reconnects) < 1 {
 		t.Fatal("subscription reconnect was not counted")
 	}

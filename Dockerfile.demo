@@ -1,0 +1,38 @@
+# syntax=docker/dockerfile:1
+FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac AS engine-builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates cmake ninja-build g++ libgrpc++-dev libprotobuf-dev \
+    protobuf-compiler protobuf-compiler-grpc && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY CMakeLists.txt OrderBook.hpp OrderBook.cpp SpscRing.hpp ./
+COPY proto ./proto
+COPY cpp ./cpp
+RUN cmake -S . -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_TESTING=OFF -DPULSEFEED_BUILD_ENGINE=ON && cmake --build /build --target engine -j2
+
+FROM golang:1.27.3-bookworm@sha256:d9b6a1beb9474adc2a1ce842573639b44b2a0dd49b6669f51d3821baf9ec37c9 AS gateway-builder
+WORKDIR /src
+COPY gateway/go.mod gateway/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY gateway ./
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gateway . \
+    && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/subscriber ./cmd/subscriber
+
+FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates libgrpc++1.51t64 libprotobuf32t64 redis-server tini bash \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 pulsefeed && useradd --uid 10001 --gid 10001 --no-create-home pulsefeed
+COPY --from=engine-builder /build/engine /usr/local/bin/pulsefeed_engine
+COPY --from=gateway-builder /out/gateway /usr/local/bin/gateway
+COPY --from=gateway-builder /out/subscriber /usr/local/bin/subscriber
+COPY --chmod=755 scripts/cloud-entrypoint.sh /usr/local/bin/cloud-entrypoint
+ENV PORT=8080 MAX_CLIENTS=100 CLIENT_BUFFER=8 GOMEMLIMIT=128MiB GOMAXPROCS=1 \
+    ENGINE_DEMO=true DEMO_INTERVAL_US=250000
+WORKDIR /tmp
+USER 10001:10001
+EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=5 \
+    CMD ["/usr/local/bin/gateway", "--healthcheck"]
+ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/cloud-entrypoint"]

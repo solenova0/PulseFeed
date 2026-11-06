@@ -62,15 +62,30 @@ func env(key, fallback string) string {
 	return fallback
 }
 
+func httpAddress() (string, error) {
+	if address := os.Getenv("HTTP_ADDR"); address != "" {
+		return address, nil
+	}
+	port := env("PORT", "8080")
+	number, err := strconv.Atoi(port)
+	if err != nil || number < 1 || number > 65535 {
+		return "", errors.New("PORT must be 1..65535")
+	}
+	return net.JoinHostPort("", strconv.Itoa(number)), nil
+}
+
 func loadConfig() (config, error) {
+	address, err := httpAddress()
+	if err != nil {
+		return config{}, err
+	}
 	c := config{
-		httpAddr: env("HTTP_ADDR", ":8080"), engineAddr: env("ENGINE_ADDR", "engine:50051"),
+		httpAddr: address, engineAddr: env("ENGINE_ADDR", "engine:50051"),
 		redisAddr: env("REDIS_ADDR", "redis:6379"), redisURL: os.Getenv("REDIS_URL"),
 		redisChannel: env("REDIS_CHANNEL", "pulsefeed.events"), authToken: os.Getenv("AUTH_TOKEN"),
 		engineToken: os.Getenv("ENGINE_TOKEN"), engineCA: os.Getenv("ENGINE_CA_FILE"),
 		engineServerName: os.Getenv("ENGINE_SERVER_NAME"), origins: make(map[string]struct{}),
 	}
-	var err error
 	if c.ingest, err = strconv.ParseBool(env("INGEST", "true")); err != nil {
 		return c, fmt.Errorf("INGEST: %w", err)
 	}
@@ -369,6 +384,7 @@ func (a *application) routes() http.Handler {
 		_, _ = w.Write([]byte("ready\n"))
 	})
 	mux.HandleFunc("/ws", a.serveWebSocket)
+	mux.Handle("/", newAssetHandler())
 	return mux
 }
 
@@ -543,6 +559,9 @@ func (a *application) consume(ctx context.Context) {
 		} else if ctx.Err() == nil {
 			slog.Warn("Redis subscription failed", "error", err)
 		}
+		// Pub/Sub cannot replay updates missed during a disconnect. Require a
+		// fresh full-depth event before admitting clients with a cached snapshot.
+		a.stateReady.Store(false)
 		_ = sub.Close()
 		stopHeartbeat()
 		stopClose()
@@ -682,7 +701,11 @@ func run(ctx context.Context, c config) error {
 
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--healthcheck" {
-		host, port, err := net.SplitHostPort(env("HTTP_ADDR", ":8080"))
+		address, err := httpAddress()
+		if err != nil {
+			os.Exit(1)
+		}
+		host, port, err := net.SplitHostPort(address)
 		if err != nil {
 			os.Exit(1)
 		}

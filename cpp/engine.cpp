@@ -378,15 +378,26 @@ private:
     }
     void demo_loop() {
         std::uint64_t id = 1'000'000'000'000ULL;
+        // Persistent outer depth keeps the synthetic book visible between cycles.
+        // Central taker limits remain inside these levels, leaving them untouched.
+        for (std::uint32_t level = 0; level < 5; ++level) {
+            if (!demo_command({id++, pulsefeed::Side::Buy, 9990 + level, 100 + level * 10}, false)) return;
+            if (!demo_command({id++, pulsefeed::Side::Sell, 10006 + level, 100 + level * 12}, false)) return;
+        }
+        const std::uint32_t centers[] = {9999, 10000, 10001, 10000};
+        std::size_t cycle = 0;
         while (running()) {
-            // A complete cycle leaves no resting orders; IDs are never reused in this process.
+            // Each six-command cycle removes its two central orders, preserving
+            // ten outer orders and at most twelve demo orders active at once.
+            // The center drifts deterministically; every submission uses a new ID.
+            const auto center = centers[cycle++ % 4];
             const auto bid = id++;
             const auto ask = id++;
             const pulsefeed::Order orders[] = {
-                {bid, pulsefeed::Side::Buy, 9999, 20},
-                {ask, pulsefeed::Side::Sell, 10001, 20},
-                {id++, pulsefeed::Side::Buy, 10001, 7},
-                {id++, pulsefeed::Side::Sell, 9999, 9},
+                {bid, pulsefeed::Side::Buy, center - 1, 20},
+                {ask, pulsefeed::Side::Sell, center + 1, 20},
+                {id++, pulsefeed::Side::Buy, center + 1, 7},
+                {id++, pulsefeed::Side::Sell, center - 1, 9},
             };
             for (const auto& order : orders) {
                 if (!demo_command(order, false)) return;
@@ -467,7 +478,11 @@ public:
         setsockopt(socket_, SOL_SOCKET, SO_REUSEADDR, &enabled, sizeof(enabled));
         sockaddr_in address{};
         address.sin_family = AF_INET;
-        address.sin_addr.s_addr = htonl(INADDR_ANY);
+        const auto metrics_address = env("ENGINE_METRICS_ADDR", "0.0.0.0");
+        if (inet_pton(AF_INET, metrics_address.c_str(), &address.sin_addr) != 1) {
+            close(socket_);
+            throw std::runtime_error("invalid ENGINE_METRICS_ADDR IPv4 address");
+        }
         address.sin_port = htons(port);
         if (bind(socket_, reinterpret_cast<sockaddr*>(&address), sizeof(address)) < 0 ||
             listen(socket_, 32) < 0) {

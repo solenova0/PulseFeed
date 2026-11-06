@@ -39,7 +39,9 @@ docker compose up --build -d
 
 These variables change host ports only. Use the same environment for `scripts/smoke.sh`, and adjust client URLs accordingly, for example `ws://localhost:18080/ws`.
 
-The engine's demo generator is enabled by default in Compose. It produces synthetic commands for one instrument; no exchange credentials or live market feed are involved.
+To retain local port choices across terminal sessions, copy `.env.example` to `.env` and edit the ports there. Compose loads `.env` automatically, and `scripts/smoke.sh` discovers the actual published bindings. The local `.env` is ignored by Git and excluded from source archives.
+
+The engine's demo generator is enabled by default in Compose. It seeds five outer price levels on each side, then cycles central orders, partial matches, and cancellations around a drifting synthetic midpoint. Demo-only active orders stay between ten and twelve after seeding. It produces synthetic commands for one instrument; no exchange credentials or live market feed are involved.
 
 | Service | Local endpoint | Purpose |
 | --- | --- | --- |
@@ -62,9 +64,29 @@ go build ./...
 go run ./cmd/subscriber -url ws://localhost:8080/ws -clients 10 -duration 10s
 ```
 
-`./scripts/smoke.sh` builds/starts the stack, waits for gateway, Prometheus, and Grafana readiness, and checks 20 concurrent subscribers. It requires Docker Compose and `curl`, exits nonzero on failure, and leaves services running for inspection. Gateway readiness requires a valid full depth event received from Redis and cached locally, so an admitted WebSocket has an initial snapshot available.
+`./scripts/smoke.sh` builds/starts the stack, waits for gateway, Prometheus, and Grafana readiness, and requires all 20 concurrent subscribers to receive events. It requires Docker Compose and `curl`, exits nonzero on failure, and leaves services running for inspection. Gateway readiness requires a valid full depth event received from Redis and cached locally, including a fresh event after every subscription interruption, so an admitted WebSocket has an initial snapshot available.
 
 Shut down with `docker compose down`. Add `-v` only when you intend to delete the observability volumes.
+
+### Free cloud demo
+
+The gateway now serves a live dashboard at `/`: current depth, midpoint history, recent trades, connection state, and sequence gaps. It uses the real synthetic C++ → gRPC → Go → Redis → WebSocket pipeline. Pause disconnects the browser; resume obtains current depth. Prices are integer ticks and quantities are lots, with no live exchange or real-money trading.
+
+`render.yaml` defines one **free** Render Docker web service using `Dockerfile.demo`. The container runs the engine, gateway, and local Redis together, with only the gateway's HTTP/WebSocket port exposed. Redis, gRPC, and engine metrics bind to loopback. The cloud demo defaults to four synthetic commands per second, a 128 MiB Go memory target, bounded clients, and a 24 MiB Redis data limit. Prometheus and Grafana remain part of the separate local Compose stack.
+
+Build and verify the cloud image locally:
+
+```bash
+docker build -f Dockerfile.demo -t pulsefeed-demo:local .
+docker run -d --name pulsefeed-demo --memory=512m --cpus=1 \
+  -e PORT=10000 -p 127.0.0.1:18081:10000 pulsefeed-demo:local
+curl --fail http://127.0.0.1:18081/readyz
+docker exec pulsefeed-demo subscriber -url ws://127.0.0.1:10000/ws -clients 20 -duration 3s -quiet
+```
+
+Open `http://localhost:18081` for the dashboard. Stop this standalone demo with `docker stop pulsefeed-demo`; remove its stopped container with `docker rm pulsefeed-demo`.
+
+After pushing the source to GitHub, import the repository as a Render Blueprint and retain its `free` plan. Use the actual HTTPS URL returned by Render for the portfolio's `liveUrl`; the dashboard selects `wss://` automatically on HTTPS. The blueprint creates no paid databases, disks, or additional services. Render's [free-tier limits](https://render.com/docs/free) include idle suspension after 15 minutes, cold starts of about a minute, monthly instance-hour and usage limits, and ephemeral state. Keep account usage/spend controls within the chosen free-only budget. The engine's in-memory state resets on restart; this deployment is a portfolio demonstration.
 
 To package just the repository's project sources, run `./scripts/package.sh /tmp/PulseFeed-source.tar.gz`. The script selects the project paths explicitly and excludes build artifacts and unrelated workspace metadata.
 
@@ -396,6 +418,7 @@ All capacities are finite. Core `BookConfig` is construction-time configuration;
 | --- | --- | --- |
 | `ENGINE_ADDR` | `0.0.0.0:50051` | gRPC listen address |
 | `ENGINE_METRICS_PORT` | `9091` | Minimal `/metrics` and `/health` HTTP server |
+| `ENGINE_METRICS_ADDR` | `0.0.0.0` | IPv4 metrics bind address; cloud demo uses loopback |
 | `ENGINE_DEMO` | `true` | Synthetic order producer |
 | `DEMO_INTERVAL_US` | `10000` | Synthetic command interval in microseconds |
 | `ENGINE_TOKEN` | unset | Require `authorization: Bearer ...` on gRPC |
